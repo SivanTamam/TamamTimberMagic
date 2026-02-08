@@ -1,0 +1,6 @@
+# Netlify redirects for SPA routing
+# Functions should pass through
+/.netlify/functions/*  /.netlify/functions/:splat  200
+
+# All other routes should serve index.html for client-side routing
+/*    /index.html   200
