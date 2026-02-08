@@ -1,10 +1,5 @@
 import type { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { query } from './utils/db'
 
 export const handler: Handler = async (event) => {
   const headers = {
@@ -25,21 +20,12 @@ export const handler: Handler = async (event) => {
   try {
     const id = event.queryStringParameters?.id
     if (id) {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', id)
-        .single()
-      if (error) throw error
-      return { statusCode: 200, headers, body: JSON.stringify(data) }
+      const result = await query('SELECT * FROM customers WHERE id = $1', [id])
+      return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) }
     }
 
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) throw error
-    return { statusCode: 200, headers, body: JSON.stringify(data) }
+    const result = await query('SELECT * FROM customers ORDER BY created_at DESC')
+    return { statusCode: 200, headers, body: JSON.stringify(result.rows) }
   } catch (error) {
     console.error('Customers error:', error)
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error' }) }

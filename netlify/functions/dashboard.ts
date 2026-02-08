@@ -1,10 +1,5 @@
 import type { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { query } from './utils/db'
 
 export const handler: Handler = async (event) => {
   const headers = {
@@ -24,39 +19,30 @@ export const handler: Handler = async (event) => {
 
   try {
     // Get total requests
-    const { count: totalRequests } = await supabase
-      .from('requests')
-      .select('*', { count: 'exact', head: true })
+    const totalResult = await query('SELECT COUNT(*) as count FROM requests')
+    const totalRequests = parseInt(totalResult.rows[0].count) || 0
 
     // Get pending requests
-    const { count: pendingRequests } = await supabase
-      .from('requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
+    const pendingResult = await query("SELECT COUNT(*) as count FROM requests WHERE status = 'pending'")
+    const pendingRequests = parseInt(pendingResult.rows[0].count) || 0
 
     // Get completed projects
-    const { count: completedProjects } = await supabase
-      .from('requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'completed')
+    const completedResult = await query("SELECT COUNT(*) as count FROM requests WHERE status = 'completed'")
+    const completedProjects = parseInt(completedResult.rows[0].count) || 0
 
     // Get total revenue from paid invoices
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('total')
-      .eq('status', 'paid')
-
-    const totalRevenue = invoices?.reduce((sum, inv) => sum + (inv.total || 0), 0) || 0
+    const revenueResult = await query("SELECT COALESCE(SUM(total), 0) as total FROM invoices WHERE status = 'paid'")
+    const totalRevenue = parseFloat(revenueResult.rows[0].total) || 0
 
     // Get monthly revenue for the last 6 months
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
     
-    const { data: monthlyInvoices } = await supabase
-      .from('invoices')
-      .select('total, created_at')
-      .eq('status', 'paid')
-      .gte('created_at', sixMonthsAgo.toISOString())
+    const monthlyInvoicesResult = await query(
+      "SELECT total, created_at FROM invoices WHERE status = 'paid' AND created_at >= $1",
+      [sixMonthsAgo.toISOString()]
+    )
+    const monthlyInvoices = monthlyInvoicesResult.rows
 
     const monthlyRevenue: { month: string; revenue: number }[] = []
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -67,25 +53,29 @@ export const handler: Handler = async (event) => {
       const monthName = months[date.getMonth()]
       const year = date.getFullYear()
       
-      const monthRevenue = monthlyInvoices?.filter(inv => {
+      const monthRevenue = monthlyInvoices?.filter((inv: { total: number; created_at: string }) => {
         const invDate = new Date(inv.created_at)
         return invDate.getMonth() === date.getMonth() && invDate.getFullYear() === year
-      }).reduce((sum, inv) => sum + (inv.total || 0), 0) || 0
+      }).reduce((sum: number, inv: { total: number }) => sum + (inv.total || 0), 0) || 0
 
       monthlyRevenue.push({ month: `${monthName} ${year}`, revenue: monthRevenue })
     }
 
     // Get requests by status
-    const statuses = ['pending', 'in_progress', 'completed', 'cancelled']
-    const requestsByStatus: { status: string; count: number }[] = []
+    const statusResult = await query(`
+      SELECT status, COUNT(*) as count FROM requests 
+      GROUP BY status
+    `)
+    const statusCounts = statusResult.rows.reduce((acc: Record<string, number>, row: { status: string; count: string }) => {
+      acc[row.status] = parseInt(row.count)
+      return acc
+    }, {})
     
-    for (const status of statuses) {
-      const { count } = await supabase
-        .from('requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', status)
-      requestsByStatus.push({ status, count: count || 0 })
-    }
+    const statuses = ['pending', 'in_progress', 'completed', 'cancelled']
+    const requestsByStatus = statuses.map(status => ({
+      status,
+      count: statusCounts[status] || 0
+    }))
 
     return {
       statusCode: 200,

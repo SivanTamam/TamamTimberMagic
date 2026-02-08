@@ -1,10 +1,5 @@
 import type { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { query } from './utils/db'
 
 export const handler: Handler = async (event) => {
   const headers = {
@@ -23,45 +18,36 @@ export const handler: Handler = async (event) => {
       case 'GET': {
         const id = event.queryStringParameters?.id
         if (id) {
-          const { data, error } = await supabase
-            .from('services')
-            .select('*')
-            .eq('id', id)
-            .single()
-          if (error) throw error
-          return { statusCode: 200, headers, body: JSON.stringify(data) }
+          const result = await query('SELECT * FROM services WHERE id = $1', [id])
+          return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) }
         }
-        const { data, error } = await supabase
-          .from('services')
-          .select('*')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const result = await query(
+          'SELECT * FROM services WHERE is_active = true ORDER BY created_at DESC'
+        )
+        return { statusCode: 200, headers, body: JSON.stringify(result.rows) }
       }
 
       case 'POST': {
         const body = JSON.parse(event.body || '{}')
-        const { data, error } = await supabase
-          .from('services')
-          .insert([body])
-          .select()
-          .single()
-        if (error) throw error
-        return { statusCode: 201, headers, body: JSON.stringify(data) }
+        const { name_en, name_he, description_en, description_he, price_from, price_to, image_url, is_active } = body
+        const result = await query(
+          `INSERT INTO services (name_en, name_he, description_en, description_he, price_from, price_to, image_url, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [name_en, name_he, description_en, description_he, price_from, price_to, image_url, is_active ?? true]
+        )
+        return { statusCode: 201, headers, body: JSON.stringify(result.rows[0]) }
       }
 
       case 'PUT': {
         const body = JSON.parse(event.body || '{}')
-        const { id, ...updates } = body
-        const { data, error } = await supabase
-          .from('services')
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('id', id)
-          .select()
-          .single()
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const { id, name_en, name_he, description_en, description_he, price_from, price_to, image_url, is_active } = body
+        const result = await query(
+          `UPDATE services SET name_en = $1, name_he = $2, description_en = $3, description_he = $4,
+           price_from = $5, price_to = $6, image_url = $7, is_active = $8, updated_at = NOW()
+           WHERE id = $9 RETURNING *`,
+          [name_en, name_he, description_en, description_he, price_from, price_to, image_url, is_active, id]
+        )
+        return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) }
       }
 
       case 'DELETE': {
@@ -69,8 +55,7 @@ export const handler: Handler = async (event) => {
         if (!id) {
           return { statusCode: 400, headers, body: JSON.stringify({ error: 'ID required' }) }
         }
-        const { error } = await supabase.from('services').delete().eq('id', id)
-        if (error) throw error
+        await query('DELETE FROM services WHERE id = $1', [id])
         return { statusCode: 204, headers, body: '' }
       }
 

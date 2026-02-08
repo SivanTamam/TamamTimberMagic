@@ -1,10 +1,5 @@
 import type { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { query } from './utils/db'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'sivantamam.uk@gmail.com'
@@ -34,20 +29,25 @@ export const handler: Handler = async (event) => {
       case 'GET': {
         const id = event.queryStringParameters?.id
         if (id) {
-          const { data, error } = await supabase
-            .from('invoices')
-            .select('*, customer:customers(*), items:invoice_items(*)')
-            .eq('id', id)
-            .single()
-          if (error) throw error
-          return { statusCode: 200, headers, body: JSON.stringify(data) }
+          const invoiceResult = await query('SELECT * FROM invoices WHERE id = $1', [id])
+          const invoice = invoiceResult.rows[0]
+          if (invoice) {
+            const customerResult = await query('SELECT * FROM customers WHERE id = $1', [invoice.customer_id])
+            const itemsResult = await query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id])
+            invoice.customer = customerResult.rows[0] || null
+            invoice.items = itemsResult.rows
+          }
+          return { statusCode: 200, headers, body: JSON.stringify(invoice) }
         }
-        const { data, error } = await supabase
-          .from('invoices')
-          .select('*, customer:customers(*), items:invoice_items(*)')
-          .order('created_at', { ascending: false })
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const invoicesResult = await query('SELECT * FROM invoices ORDER BY created_at DESC')
+        const invoices = invoicesResult.rows
+        for (const inv of invoices) {
+          const customerResult = await query('SELECT * FROM customers WHERE id = $1', [inv.customer_id])
+          const itemsResult = await query('SELECT * FROM invoice_items WHERE invoice_id = $1', [inv.id])
+          inv.customer = customerResult.rows[0] || null
+          inv.items = itemsResult.rows
+        }
+        return { statusCode: 200, headers, body: JSON.stringify(invoices) }
       }
 
       case 'POST': {
@@ -56,18 +56,17 @@ export const handler: Handler = async (event) => {
         // Check if this is a send request
         if (event.path?.includes('/send')) {
           const { id } = body
-          const { data: invoice, error: fetchError } = await supabase
-            .from('invoices')
-            .select('*, customer:customers(*), items:invoice_items(*)')
-            .eq('id', id)
-            .single()
-          if (fetchError) throw fetchError
+          const invoiceResult = await query('SELECT * FROM invoices WHERE id = $1', [id])
+          const invoice = invoiceResult.rows[0]
+          if (!invoice) throw new Error('Invoice not found')
+          
+          const customerResult = await query('SELECT * FROM customers WHERE id = $1', [invoice.customer_id])
+          const itemsResult = await query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id])
+          invoice.customer = customerResult.rows[0] || null
+          invoice.items = itemsResult.rows
 
           // Update status to sent
-          await supabase
-            .from('invoices')
-            .update({ status: 'sent', updated_at: new Date().toISOString() })
-            .eq('id', id)
+          await query("UPDATE invoices SET status = 'sent', updated_at = NOW() WHERE id = $1", [id])
 
           // Build invoice items HTML
           const itemsHtml = invoice.items?.map((item: { description: string; quantity: number; unit_price: number; total: number }) => 
@@ -127,54 +126,51 @@ export const handler: Handler = async (event) => {
         const { customer_id, items, subtotal, tax, total, status, due_date, notes } = body
         const invoice_number = generateInvoiceNumber()
 
-        const { data: invoice, error: invoiceError } = await supabase
-          .from('invoices')
-          .insert([{
-            invoice_number,
-            customer_id,
-            subtotal,
-            tax,
-            total,
-            status,
-            due_date,
-            notes,
-          }])
-          .select()
-          .single()
-        if (invoiceError) throw invoiceError
+        const invoiceResult = await query(
+          `INSERT INTO invoices (invoice_number, customer_id, subtotal, tax, total, status, due_date, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [invoice_number, customer_id, subtotal, tax, total, status || 'draft', due_date, notes]
+        )
+        const invoice = invoiceResult.rows[0]
 
         // Insert invoice items
         if (items && items.length > 0) {
-          const itemsWithInvoiceId = items.map((item: { description: string; quantity: number; unit_price: number }) => ({
-            invoice_id: invoice.id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            total: item.quantity * item.unit_price,
-          }))
-          await supabase.from('invoice_items').insert(itemsWithInvoiceId)
+          for (const item of items as { description: string; quantity: number; unit_price: number }[]) {
+            await query(
+              `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, total)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [invoice.id, item.description, item.quantity, item.unit_price, item.quantity * item.unit_price]
+            )
+          }
         }
 
-        const { data: fullInvoice } = await supabase
-          .from('invoices')
-          .select('*, customer:customers(*), items:invoice_items(*)')
-          .eq('id', invoice.id)
-          .single()
+        // Fetch full invoice with customer and items
+        const customerResult = await query('SELECT * FROM customers WHERE id = $1', [customer_id])
+        const itemsResult = await query('SELECT * FROM invoice_items WHERE invoice_id = $1', [invoice.id])
+        invoice.customer = customerResult.rows[0] || null
+        invoice.items = itemsResult.rows
 
-        return { statusCode: 201, headers, body: JSON.stringify(fullInvoice) }
+        return { statusCode: 201, headers, body: JSON.stringify(invoice) }
       }
 
       case 'PUT': {
         const body = JSON.parse(event.body || '{}')
-        const { id, ...updates } = body
-        const { data, error } = await supabase
-          .from('invoices')
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('id', id)
-          .select('*, customer:customers(*), items:invoice_items(*)')
-          .single()
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const { id, status, subtotal, tax, total, due_date, notes } = body
+        const result = await query(
+          `UPDATE invoices SET status = COALESCE($1, status), subtotal = COALESCE($2, subtotal),
+           tax = COALESCE($3, tax), total = COALESCE($4, total), due_date = COALESCE($5, due_date),
+           notes = COALESCE($6, notes), updated_at = NOW()
+           WHERE id = $7 RETURNING *`,
+          [status, subtotal, tax, total, due_date, notes, id]
+        )
+        const invoice = result.rows[0]
+        if (invoice) {
+          const customerResult = await query('SELECT * FROM customers WHERE id = $1', [invoice.customer_id])
+          const itemsResult = await query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id])
+          invoice.customer = customerResult.rows[0] || null
+          invoice.items = itemsResult.rows
+        }
+        return { statusCode: 200, headers, body: JSON.stringify(invoice) }
       }
 
       default:

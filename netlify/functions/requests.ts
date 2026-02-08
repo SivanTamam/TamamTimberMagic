@@ -1,10 +1,5 @@
 import type { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { query } from './utils/db'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'sivantamam.uk@gmail.com'
@@ -24,12 +19,16 @@ export const handler: Handler = async (event) => {
   try {
     switch (event.httpMethod) {
       case 'GET': {
-        const { data, error } = await supabase
-          .from('requests')
-          .select('*, customer:customers(*), service:services(*)')
-          .order('created_at', { ascending: false })
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const result = await query(`
+          SELECT r.*, 
+            json_build_object('id', c.id, 'name', c.name, 'email', c.email, 'phone', c.phone) as customer,
+            json_build_object('id', s.id, 'name_en', s.name_en, 'name_he', s.name_he) as service
+          FROM requests r
+          LEFT JOIN customers c ON r.customer_id = c.id
+          LEFT JOIN services s ON r.service_id = s.id
+          ORDER BY r.created_at DESC
+        `)
+        return { statusCode: 200, headers, body: JSON.stringify(result.rows) }
       }
 
       case 'POST': {
@@ -38,36 +37,28 @@ export const handler: Handler = async (event) => {
 
         // Create or find customer
         let customerId: string
-        const { data: existingCustomer } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('email', email)
-          .single()
+        const existingCustomer = await query(
+          'SELECT id FROM customers WHERE email = $1',
+          [email]
+        )
 
-        if (existingCustomer) {
-          customerId = existingCustomer.id
+        if (existingCustomer.rows.length > 0) {
+          customerId = existingCustomer.rows[0].id
         } else {
-          const { data: newCustomer, error: customerError } = await supabase
-            .from('customers')
-            .insert([{ name, email, phone }])
-            .select()
-            .single()
-          if (customerError) throw customerError
-          customerId = newCustomer.id
+          const newCustomer = await query(
+            'INSERT INTO customers (name, email, phone) VALUES ($1, $2, $3) RETURNING id',
+            [name, email, phone]
+          )
+          customerId = newCustomer.rows[0].id
         }
 
         // Create request
-        const { data: request, error: requestError } = await supabase
-          .from('requests')
-          .insert([{
-            customer_id: customerId,
-            service_id: service_id || null,
-            description,
-            status: 'pending',
-          }])
-          .select('*, customer:customers(*), service:services(*)')
-          .single()
-        if (requestError) throw requestError
+        const requestResult = await query(
+          `INSERT INTO requests (customer_id, service_id, description, status) 
+           VALUES ($1, $2, $3, 'pending') RETURNING *`,
+          [customerId, service_id || null, description]
+        )
+        const request = requestResult.rows[0]
 
         // Send email notification to admin
         if (RESEND_API_KEY) {
@@ -158,14 +149,12 @@ export const handler: Handler = async (event) => {
       case 'PUT': {
         const body = JSON.parse(event.body || '{}')
         const { id, status } = body
-        const { data, error } = await supabase
-          .from('requests')
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq('id', id)
-          .select('*, customer:customers(*), service:services(*)')
-          .single()
-        if (error) throw error
-        return { statusCode: 200, headers, body: JSON.stringify(data) }
+        const result = await query(
+          `UPDATE requests SET status = $1, updated_at = NOW() WHERE id = $2
+           RETURNING *`,
+          [status, id]
+        )
+        return { statusCode: 200, headers, body: JSON.stringify(result.rows[0]) }
       }
 
       default:
