@@ -1,8 +1,7 @@
 import axios from 'axios'
 import type { Service, GalleryItem, ServiceRequest, Invoice, Customer, DashboardStats } from '../types'
-import { supabase } from './supabase'
 
-const supabaseConfigured = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseConfigured = !!import.meta.env.VITE_SUPABASE_URL
 
 const apiClient = axios.create({
   baseURL: '/.netlify/functions',
@@ -199,16 +198,13 @@ export const api = {
       if (!supabaseConfigured) {
         return mockServices
       }
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-      if (error) {
-        console.error('Supabase error:', error)
+      try {
+        const response = await apiClient.get<Service[]>('/services')
+        return response.data || mockServices
+      } catch (error) {
+        console.error('API error:', error)
         return mockServices
       }
-      return data || mockServices
     },
     getById: async (id: string): Promise<Service> => {
       const response = await apiClient.get<Service>(`/services?id=${id}`)
@@ -232,30 +228,25 @@ export const api = {
       if (!supabaseConfigured) {
         return mockGallery
       }
-      const { data, error } = await supabase
-        .from('gallery')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) {
-        console.error('Supabase error:', error)
+      try {
+        const response = await apiClient.get<GalleryItem[]>('/gallery')
+        return response.data || mockGallery
+      } catch (error) {
+        console.error('API error:', error)
         return mockGallery
       }
-      return data || mockGallery
     },
     getFeatured: async (): Promise<GalleryItem[]> => {
       if (!supabaseConfigured) {
         return mockGallery.filter(item => item.is_featured)
       }
-      const { data, error } = await supabase
-        .from('gallery')
-        .select('*')
-        .eq('is_featured', true)
-        .order('created_at', { ascending: false })
-      if (error) {
-        console.error('Supabase error:', error)
+      try {
+        const response = await apiClient.get<GalleryItem[]>('/gallery?featured=true')
+        return response.data || mockGallery.filter(item => item.is_featured)
+      } catch (error) {
+        console.error('API error:', error)
         return mockGallery.filter(item => item.is_featured)
       }
-      return data || mockGallery.filter(item => item.is_featured)
     },
     create: async (item: Omit<GalleryItem, 'id' | 'created_at'>): Promise<GalleryItem> => {
       const response = await apiClient.post<GalleryItem>('/gallery', item)
