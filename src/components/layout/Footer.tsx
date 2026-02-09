@@ -11,7 +11,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Brand */}
           <div>
-            <h3 className="text-2xl font-serif font-bold mb-2">Tamam Timber Magic</h3>
+            <img src="/img/logo.svg" alt="Tamam Timber Magic" className="h-10 brightness-0 invert mb-3" />
             <p className="text-wood-200">{t('footer.tagline')}</p>
           </div>
 

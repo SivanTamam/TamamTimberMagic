@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@netlify/functions": "^2.4.1",
+    "@emailjs/browser": "^4.1.0",
     "pg": "^8.11.3",
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",

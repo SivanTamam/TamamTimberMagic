@@ -1,7 +1,7 @@
 import type { Handler } from '@netlify/functions'
 import { query } from './utils/db'
+import { sendEmail } from './utils/email'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'sivantamam.uk@gmail.com'
 
 function generateInvoiceNumber(): string {
@@ -102,21 +102,17 @@ export const handler: Handler = async (event) => {
           `
 
           // Send email to customer
-          if (RESEND_API_KEY && invoice.customer?.email) {
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${RESEND_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from: 'Tamam Timber Magic <noreply@timbermagic.com>',
+          if (invoice.customer?.email) {
+            try {
+              await sendEmail({
                 to: invoice.customer.email,
                 cc: ADMIN_EMAIL,
                 subject: `Invoice ${invoice.invoice_number} - Tamam Timber Magic`,
                 html: invoiceHtml,
-              }),
-            })
+              })
+            } catch (emailError) {
+              console.error('Failed to send invoice email:', emailError)
+            }
           }
 
           return { statusCode: 200, headers, body: JSON.stringify({ success: true }) }

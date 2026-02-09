@@ -29,13 +29,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2 rtl:space-x-reverse">
-              <span className="text-2xl font-serif font-bold text-wood-700">
-                Tamam
-              </span>
-              <span className="text-sm text-forest-600 font-medium hidden sm:block">
-                Timber Magic
-              </span>
+            <Link to="/" className="flex items-center">
+              <img src="/img/logo.svg" alt="Tamam Timber Magic" className="h-10" />
             </Link>
           </div>
 

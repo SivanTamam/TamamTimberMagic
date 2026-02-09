@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
 import { useLanguage } from '../contexts/LanguageContext'
 import { api } from '../services/api'
+import { sendQuoteNotification, sendQuoteConfirmation } from '../services/emailjs'
 
 export default function RequestPage() {
   const { t, language } = useLanguage()
@@ -33,6 +34,18 @@ export default function RequestPage() {
     },
     onSuccess: () => {
       toast.success(t('request.form.success'))
+      // Send emails via EmailJS (client-side, non-blocking)
+      sendQuoteNotification({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        description: formData.description,
+        imageCount: inspirationImages.length,
+      }).catch(err => console.error('Failed to send admin notification:', err))
+      sendQuoteConfirmation({
+        name: formData.name,
+        email: formData.email,
+      }).catch(err => console.error('Failed to send confirmation:', err))
       setFormData({ name: '', email: '', phone: '', service_id: '', description: '' })
       setInspirationImages([])
     },

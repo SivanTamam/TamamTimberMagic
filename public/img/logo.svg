@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 60" fill="none">
+  <!-- Wood grain icon -->
+  <g transform="translate(0, 5)">
+    <!-- Tree ring / wood cross-section -->
+    <circle cx="25" cy="25" r="23" stroke="#8B5E3C" stroke-width="2.5" fill="none"/>
+    <circle cx="25" cy="25" r="16" stroke="#8B5E3C" stroke-width="1.5" fill="none" opacity="0.7"/>
+    <circle cx="25" cy="25" r="9" stroke="#8B5E3C" stroke-width="1.2" fill="none" opacity="0.5"/>
+    <circle cx="25" cy="25" r="3" fill="#8B5E3C" opacity="0.6"/>
+    <!-- Chisel / tool accent -->
+    <line x1="38" y1="8" x2="48" y2="2" stroke="#2D5A27" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="48" y1="2" x2="50" y2="0" stroke="#2D5A27" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+  <!-- Text -->
+  <text x="60" y="28" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700" fill="#8B5E3C" letter-spacing="1">TAMAM</text>
+  <text x="60" y="48" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="500" fill="#2D5A27" letter-spacing="3.5">TIMBER MAGIC</text>
+</svg>
