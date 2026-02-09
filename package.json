@@ -13,7 +13,7 @@
   "dependencies": {
     "@netlify/functions": "^2.4.1",
     "@emailjs/browser": "^4.1.0",
-    "pg": "^8.11.3",
+    "postgres": "^3.4.3",
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",
     "browser-image-compression": "^2.0.2",
@@ -28,7 +28,6 @@
     "react-router-dom": "^6.21.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.10.9",
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",
     "@types/react-dom": "^18.2.18",
