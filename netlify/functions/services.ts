@@ -62,8 +62,8 @@ export const handler: Handler = async (event) => {
       default:
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Services error:', error)
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error' }) }
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message || 'Internal server error', stack: error.stack }) }
   }
 }
